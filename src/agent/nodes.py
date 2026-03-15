@@ -1,5 +1,7 @@
 """LangGraph node implementations."""
 import asyncio
+import re
+from pathlib import Path
 import structlog
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,6 +16,23 @@ from src.rag.retriever import retrieve_interests, filter_articles_by_interests
 from src.monitoring.callbacks import get_langfuse_handler
 
 logger = structlog.get_logger()
+
+
+def _load_style_templates(templates_dir: str) -> list[str]:
+    """Load all .txt style template files from the given directory."""
+    path = Path(templates_dir)
+    if not path.is_dir():
+        logger.warning("style_templates_dir_not_found", path=str(path))
+        return []
+    templates = sorted(path.glob("*.txt"))
+    examples = []
+    for f in templates:
+        try:
+            examples.append(f.read_text(encoding="utf-8").strip())
+        except OSError as exc:
+            logger.warning("style_template_read_error", file=str(f), error=str(exc))
+    logger.info("style_templates_loaded", count=len(examples), dir=str(path))
+    return examples
 
 
 def node_validate_request(state: AgentState) -> AgentState:
@@ -124,6 +143,29 @@ def node_rag_filter(state: AgentState) -> AgentState:
     return {**state, "rag_context": interests, "filtered_articles": filtered}
 
 
+def _inject_inline_sources(post: str, articles: list[dict], source_label_fn) -> str:
+    """Inject inline HTML source links after each numbered paragraph (1/, 2/, ...)."""
+    lines = post.split("\n")
+    result = []
+    for line in lines:
+        stripped = line.strip()
+        m = re.match(r"^(\d+)/", stripped)
+        if m:
+            idx = int(m.group(1)) - 1
+            if 0 <= idx < len(articles):
+                article = articles[idx]
+                url = article.get("url", "")
+                label = source_label_fn(article)
+                # Remove any existing source marker added by LLM: (Medium), (Telegram @...)
+                cleaned = re.sub(r"\s*\([^)]{1,40}\)\s*$", "", line.rstrip())
+                if url:
+                    line = f"{cleaned} [{label}] ({url})"
+                else:
+                    line = f"{cleaned} [{label}]"
+        result.append(line)
+    return "\n".join(result)
+
+
 def node_generate_post(state: AgentState) -> AgentState:
     """Generate a Telegram post from filtered articles using LLM."""
     settings = get_settings()
@@ -150,15 +192,18 @@ def node_generate_post(state: AgentState) -> AgentState:
         for i, a in enumerate(articles[:n])
     )
 
-    system_prompt = """Ты — редактор Telegram-канала о технологиях. Твоя задача: на основе предоставленных новостей написать короткий, информативный пост для публикации в Telegram.
+    style_examples = _load_style_templates(settings.style_templates_dir)
+
+    style_section = ""
+    if style_examples:
+        joined = "\n\n---\n\n".join(style_examples)
+        style_section = f"\n\nПримеры постов в нужном стиле (повтори структуру, тон и подачу):\n\n{joined}\n\n---"
+
+    system_prompt = f"""Ты — редактор Telegram-канала о технологиях. Твоя задача: на основе предоставленных новостей написать пост в точно таком же стиле, как примеры ниже.{style_section}
 
 Правила:
-- Длина поста: 150-300 слов
-- Используй эмодзи уместно
-- Сделай заголовок привлекательным
-- Кратко опиши 2-3 самые интересные новости
-- После каждой новости ОБЯЗАТЕЛЬНО укажи источник в скобках: (Medium) или (Telegram @channel)
-- Добавь призыв к действию в конце
+- Строго следуй стилю примеров: структура, тон, использование эмодзи, длина
+- НЕ добавляй источники самостоятельно — они будут вставлены автоматически
 - Пиши на русском языке"""
 
     user_prompt = f"""Интересы аудитории: {', '.join(interests)}
@@ -166,7 +211,7 @@ def node_generate_post(state: AgentState) -> AgentState:
 Свежие новости:
 {article_summaries}
 
-Напиши пост для Telegram-канала. Для каждой новости укажи источник."""
+Напиши пост в стиле примеров."""
 
     callbacks = []
     handler = get_langfuse_handler(session_id, user_id)
@@ -187,13 +232,8 @@ def node_generate_post(state: AgentState) -> AgentState:
         ])
         post = response.content
 
-        # Детерминированно добавляем ссылки — не полагаемся на LLM
-        sources_block = "\n\n📎 <b>Источники:</b>\n" + "\n".join(
-            f"• <a href=\"{a.get('url', '')}\">({_source_label(a)}) {a['title'][:60]}</a>"
-            for a in articles[:n]
-            if a.get("url")
-        )
-        post = post + sources_block
+        # Детерминированно вставляем источники inline после каждого пронумерованного пункта
+        post = _inject_inline_sources(post, articles[:n], _source_label)
 
         logger.info("post_generated", length=len(post), session_id=session_id)
         return {**state, "generated_post": post}

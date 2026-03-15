@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     telegram_publish_channel: str = Field(default="")
 
     # Post generation
-    max_articles_in_post: int = Field(default=3)
+    max_articles_in_post: int = Field(default=5)
+    style_templates_dir: str = Field(default="./style_templates")
 
     # Security
     max_message_length: int = Field(default=1000)
