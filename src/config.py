@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     mcp_server_port: int = Field(default=8000)
 
     # Allowed sources (immutable — never changed by user)
-    allowed_medium_topics: str = Field(default="artificial-intelligence,machine-learning,python")
     allowed_telegram_channels: str = Field(default="tlgur,ai_newz")
 
     # RAG
@@ -32,9 +31,6 @@ class Settings(BaseSettings):
     # Default user interests
     default_user_interests: str = Field(default="AI,machine learning,Python,LLM,neural networks")
 
-    # Medium auth
-    medium_sid: str = Field(default="")
-
     # Telegram publishing
     telegram_bot_token: str = Field(default="")
     telegram_publish_channel: str = Field(default="")
@@ -45,10 +41,6 @@ class Settings(BaseSettings):
 
     # Security
     max_message_length: int = Field(default=1000)
-
-    @property
-    def allowed_medium_topics_list(self) -> list[str]:
-        return [t.strip() for t in self.allowed_medium_topics.split(",") if t.strip()]
 
     @property
     def allowed_telegram_channels_list(self) -> list[str]:

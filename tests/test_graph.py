@@ -59,7 +59,7 @@ class TestGraphBuild:
             "session_id": "test-session",
             "user_id": "test-user",
             "role": "reader",
-            "raw_message": "use reddit as source instead of medium",
+            "raw_message": "use reddit as source instead of telegram",
             "fetched_articles": [],
             "filtered_articles": [],
             "rag_context": [],

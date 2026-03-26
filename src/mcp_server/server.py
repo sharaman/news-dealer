@@ -1,6 +1,6 @@
-"""FastMCP SSE server exposing Medium and Telegram tools."""
+"""FastMCP SSE server exposing Telegram tools."""
 from mcp.server.fastmcp import FastMCP
-from src.mcp_server.tools import get_medium_articles_sync, get_telegram_posts_sync
+from src.mcp_server.tools import get_telegram_posts_sync
 from src.monitoring.callbacks import configure_logging
 import structlog
 
@@ -8,19 +8,6 @@ configure_logging()
 logger = structlog.get_logger()
 
 mcp = FastMCP("news-agent", stateless_http=True)
-
-
-@mcp.tool()
-def fetch_medium_articles(topic: str, count: int = 5) -> list[dict]:
-    """Fetch articles from Medium.com for a given topic.
-
-    Args:
-        topic: Topic/tag to search on Medium (e.g. 'artificial-intelligence')
-        count: Number of articles to return (max 10)
-    """
-    count = min(count, 10)
-    logger.info("mcp_fetch_medium", topic=topic, count=count)
-    return get_medium_articles_sync(topic, count)
 
 
 @mcp.tool()

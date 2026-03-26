@@ -27,11 +27,11 @@ _COMPILED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _INJECTION_PATTERNS]
 _SOURCE_MANIPULATION_PATTERNS = [
     r"(add|use|include|fetch|read|subscribe)\s+(from\s+)?(reddit|twitter|x\.com|hackernews|hn|youtube|instagram|tiktok|rss|url|https?://)",
     r"(change|modify|update|set)\s+(the\s+)?(source|sources|feed|feeds|channel|channels)",
-    r"instead\s+of\s+(medium|telegram)",
+    r"instead\s+of\s+telegram",
     r"(new|different|another)\s+(source|feed|channel)",
     # Russian patterns
     r"(используй|добавь|включи|читай|подключи|возьми)\s+.*(reddit|twitter|hackernews|youtube|instagram|tiktok|https?://)",
-    r"(вместо|замени|поменяй)\s+.*(medium|telegram|источник)",
+    r"(вместо|замени|поменяй)\s+.*(telegram|источник)",
     r"(измени|добавь|удали|поменяй)\s+(источник|источники|канал|каналы|фид)",
 ]
 

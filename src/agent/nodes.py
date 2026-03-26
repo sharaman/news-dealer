@@ -67,7 +67,6 @@ def node_check_permissions(state: AgentState) -> AgentState:
     decision = check_permissions(
         user_id=user_id,
         role=role,
-        allowed_medium_topics=settings.allowed_medium_topics_list,
         allowed_telegram_channels=settings.allowed_telegram_channels_list,
     )
 
@@ -81,27 +80,21 @@ def node_check_permissions(state: AgentState) -> AgentState:
     return {
         **state,
         "permission_result": "allowed",
-        "allowed_medium_topics": decision.allowed_medium_topics,
         "allowed_telegram_channels": decision.allowed_telegram_channels,
         "max_articles": decision.max_articles,
     }
 
 
 async def _fetch_all_sources(
-    medium_topics: list[str],
     telegram_channels: list[str],
     max_articles: int,
-    medium_sid: str = "",
 ) -> list[dict]:
     """Fetch from all allowed sources concurrently."""
-    from src.sources.medium import fetch_medium_articles
     from src.sources.telegram import fetch_telegram_posts
 
     tasks = []
-    per_source = max(2, max_articles // max(1, len(medium_topics) + len(telegram_channels)))
+    per_source = max(2, max_articles // max(1, len(telegram_channels)))
 
-    for topic in medium_topics:
-        tasks.append(fetch_medium_articles(topic, per_source, sid=medium_sid))
     for channel in telegram_channels:
         tasks.append(fetch_telegram_posts(channel, per_source))
 
@@ -115,14 +108,10 @@ async def _fetch_all_sources(
 
 def node_fetch_sources(state: AgentState) -> AgentState:
     """Data Plane: fetch articles from MCP-approved sources."""
-    settings = get_settings()
-    medium_topics = state.get("allowed_medium_topics", [])
     telegram_channels = state.get("allowed_telegram_channels", [])
     max_articles = state.get("max_articles", 10)
 
-    articles = asyncio.run(
-        _fetch_all_sources(medium_topics, telegram_channels, max_articles, medium_sid=settings.medium_sid)
-    )
+    articles = asyncio.run(_fetch_all_sources(telegram_channels, max_articles))
 
     logger.info("sources_fetched", total=len(articles))
     return {**state, "fetched_articles": articles}
@@ -133,9 +122,7 @@ def node_rag_filter(state: AgentState) -> AgentState:
     settings = get_settings()
     seed_interests(settings.chroma_persist_dir, settings.default_user_interests_list)
 
-    query = state.get("normalized_message", "") + " " + " ".join(
-        state.get("allowed_medium_topics", [])
-    )
+    query = state.get("normalized_message", "")
     interests = retrieve_interests(settings.chroma_persist_dir, query, n_results=5)
     articles = state.get("fetched_articles", [])
     filtered = filter_articles_by_interests(articles, interests)
@@ -156,7 +143,7 @@ def _inject_inline_sources(post: str, articles: list[dict], source_label_fn) -> 
                 article = articles[idx]
                 url = article.get("url", "")
                 label = source_label_fn(article)
-                # Remove any existing source marker added by LLM: (Medium), (Telegram @...)
+                # Remove any existing source marker added by LLM.
                 cleaned = re.sub(r"\s*\([^)]{1,40}\)\s*$", "", line.rstrip())
                 if url:
                     line = f"{cleaned} [{label}] ({url})"
@@ -182,7 +169,7 @@ def node_generate_post(state: AgentState) -> AgentState:
     def _source_label(a: dict) -> str:
         if a.get("source") == "telegram":
             return f"Telegram @{a.get('channel', 'unknown')}"
-        return f"Medium / {a.get('topic', 'unknown')}"
+        return "Источник"
 
     article_summaries = "\n\n".join(
         f"[{i+1}] {a['title']}\n"

@@ -16,7 +16,6 @@ class AgentState(TypedDict, total=False):
     # Control Plane decision
     permission_result: Literal["allowed", "denied"]
     denial_reason: str
-    allowed_medium_topics: list[str]
     allowed_telegram_channels: list[str]
     max_articles: int
 

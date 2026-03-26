@@ -37,7 +37,7 @@ class TestInjectionDetection:
 
 class TestSourceManipulation:
     def test_reddit_blocked(self):
-        safe, reason = check_source_manipulation("use reddit instead of medium")
+        safe, reason = check_source_manipulation("use reddit instead of telegram")
         assert safe is False
 
     def test_add_url_blocked(self):
